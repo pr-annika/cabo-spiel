@@ -7,6 +7,8 @@ from flask_socketio import SocketIO, emit, join_room, leave_room
 import random
 import uuid
 
+import os
+
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'fallback-nur-lokal')
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
@@ -552,7 +554,6 @@ def on_disconnect():
 # ─────────────────────────────────────────
 # START
 # ─────────────────────────────────────────
-import os
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     debug = os.environ.get('RENDER') is None  # debug nur lokal
