@@ -560,6 +560,10 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     debug = os.environ.get('RENDER') is None  # debug nur lokal
     socketio.run(app, host='0.0.0.0', port=port, debug=debug, allow_unsafe_werkzeug=True)
+else:
+    # Render startet manchmal nicht über __main__
+    port = int(os.environ.get('PORT', 5000))
+    socketio.run(app, host='0.0.0.0', port=port, allow_unsafe_werkzeug=True)
 
 # Notizen
 # create_deck() — baut das komplette Cabo-Deck mit allen 52 Karten und weist den 7/8/9/10/11/12ern ihre Aktionen zu.
