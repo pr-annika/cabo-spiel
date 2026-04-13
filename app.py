@@ -155,16 +155,26 @@ def on_create_game(data):
 
 @socketio.on('join_game')
 def on_join_game(data):
-    """Spieler 2 tritt einem Spiel bei."""
     game_id = data.get('game_id', '').upper()
     name = data.get('name', 'Spieler 2')
     if game_id not in games:
         emit('error', {'msg': 'Spiel nicht gefunden!'})
         return
     g = games[game_id]
+
+    # Schon im Spiel? (Reconnect mit neuer Socket-ID)
+    existing = next((p for p in g['players'] if p['name'] == name), None)
+    if existing:
+        existing['sid'] = request.sid
+        join_room(game_id)
+        emit('joined_game', {'game_id': game_id})
+        broadcast_state(game_id)
+        return
+
     if len(g['players']) >= 2:
         emit('error', {'msg': 'Spiel ist bereits voll!'})
         return
+
     g['players'].append({
         'sid': request.sid,
         'name': name,
@@ -532,19 +542,21 @@ def on_next_round(data):
 
 @socketio.on('disconnect')
 def on_disconnect():
-    """Spieler trennt die Verbindung."""
     for game_id, g in list(games.items()):
         for p in g['players']:
             if p['sid'] == request.sid:
                 socketio.emit('player_left', {'name': p['name']}, to=game_id)
+                # Spieler NICHT entfernen — er kann reconnecten
                 break
 
 # ─────────────────────────────────────────
 # START
 # ─────────────────────────────────────────
+import os
 if __name__ == '__main__':
-    socketio.run(app, debug=True, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
-
+    port = int(os.environ.get('PORT', 5000))
+    debug = os.environ.get('RENDER') is None  # debug nur lokal
+    socketio.run(app, host='0.0.0.0', port=port, debug=debug, allow_unsafe_werkzeug=True)
 
 # Notizen
 # create_deck() — baut das komplette Cabo-Deck mit allen 52 Karten und weist den 7/8/9/10/11/12ern ihre Aktionen zu.
