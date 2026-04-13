@@ -8,7 +8,7 @@ import random
 import uuid
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'cabo-secret-123'
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'fallback-nur-lokal')
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
 
 # ─────────────────────────────────────────
