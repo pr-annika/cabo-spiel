@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cabo</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #1a1a2e;
+      --surface: #16213e;
+      --card-bg: #f5f0e8;
+      --card-border: #c8b89a;
+      --accent: #e94560;
+      --accent2: #0f3460;
+      --green: #2ecc71;
+      --amber: #f39c12;
+      --text: #eaeaea;
+      --text-muted: #8892a4;
+      --radius: 10px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* ── LOBBY ── */
+    #lobby {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      gap: 24px;
+      padding: 24px;
+    }
+
+    #lobby h1 {
+      font-size: 3rem;
+      letter-spacing: 8px;
+      color: var(--accent);
+      text-shadow: 0 0 30px rgba(233,69,96,0.4);
+    }
+
+    #lobby p.subtitle {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      letter-spacing: 2px;
+    }
+
+    .lobby-box {
+      background: var(--surface);
+      border: 1px solid #2a2a4a;
+      border-radius: var(--radius);
+      padding: 28px;
+      width: 100%;
+      max-width: 380px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .lobby-box h2 {
+      font-size: 1rem;
+      color: var(--text-muted);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+
+    input[type="text"] {
+      background: #0d1117;
+      border: 1px solid #2a2a4a;
+      border-radius: 6px;
+      color: var(--text);
+      padding: 10px 14px;
+      font-size: 1rem;
+      width: 100%;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    input[type="text"]:focus { border-color: var(--accent); }
+
+    button {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+      font-weight: 600;
+      letter-spacing: 1px;
+    }
+
+    button:hover { opacity: 0.85; }
+    button:active { transform: scale(0.97); }
+
+    .btn-primary { background: var(--accent); color: white; }
+    .btn-secondary { background: var(--accent2); color: white; }
+    .btn-success { background: var(--green); color: white; }
+    .btn-outline {
+      background: transparent;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+    }
+
+    /* ── GAME AREA ── */
+    #game { display: none; flex-direction: column; width: 100%; max-width: 900px; padding: 16px; gap: 16px; }
+
+    /* Header */
+    .game-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 12px 20px;
+    }
+
+    .game-id-badge {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      letter-spacing: 2px;
+    }
+
+    .game-id-badge span {
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 1rem;
+    }
+
+    .turn-indicator {
+      font-size: 0.85rem;
+      padding: 6px 14px;
+      border-radius: 20px;
+      background: var(--accent2);
+      color: var(--text);
+    }
+
+    .turn-indicator.my-turn {
+      background: var(--accent);
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(233,69,96,0.4); }
+      50% { box-shadow: 0 0 0 8px rgba(233,69,96,0); }
+    }
+
+    /* Status message */
+    #status-msg {
+      text-align: center;
+      font-size: 0.9rem;
+      color: var(--amber);
+      min-height: 22px;
+      letter-spacing: 0.5px;
+    }
+
+    /* Table area */
+    .table-area {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 40px;
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 24px;
+    }
+
+    .pile-container { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+    .pile-label { font-size: 0.75rem; color: var(--text-muted); letter-spacing: 1px; text-transform: uppercase; }
+
+    /* Cards */
+    .card {
+      width: 70px;
+      height: 100px;
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      cursor: default;
+      position: relative;
+      transition: transform 0.15s, box-shadow 0.15s;
+      user-select: none;
+    }
+
+    .card.face-up {
+      background: var(--card-bg);
+      border: 2px solid var(--card-border);
+      color: #2c2c2c;
+    }
+
+    .card.face-down {
+      background: linear-gradient(135deg, #1a237e 0%, #283593 50%, #1a237e 100%);
+      border: 2px solid #3949ab;
+    }
+
+    .card.face-down::after {
+      content: '';
+      position: absolute;
+      inset: 5px;
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 4px;
+    }
+
+    .card-value { font-size: 1.6rem; line-height: 1; }
+    .card-action { font-size: 0.65rem; color: #666; margin-top: 2px; letter-spacing: 0.5px; }
+    .card-symbol { font-size: 1rem; margin-top: 2px; }
+
+    .card.clickable {
+      cursor: pointer;
+    }
+
+    .card.clickable:hover {
+      transform: translateY(-6px);
+      box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+    }
+
+    .card.selected {
+      transform: translateY(-8px);
+      box-shadow: 0 0 0 3px var(--accent), 0 8px 20px rgba(233,69,96,0.3);
+    }
+
+    .card.drawn-card {
+      box-shadow: 0 0 0 3px var(--green);
+    }
+
+    /* Deck counter */
+    .deck-card {
+      width: 70px;
+      height: 100px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #1a237e 0%, #283593 50%, #1a237e 100%);
+      border: 2px solid #3949ab;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: transform 0.15s;
+    }
+
+    .deck-card:hover { transform: translateY(-4px); }
+    .deck-count-badge {
+      background: rgba(0,0,0,0.5);
+      color: white;
+      font-size: 0.8rem;
+      padding: 3px 8px;
+      border-radius: 10px;
+      margin-top: 6px;
+    }
+
+    /* Players */
+    .players-container { display: flex; flex-direction: column; gap: 16px; }
+
+    .player-area {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      border: 1px solid transparent;
+      transition: border-color 0.3s;
+    }
+
+    .player-area.active-player { border-color: var(--accent); }
+    .player-area.me { border-color: #2a3f6a; }
+
+    .player-info {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .player-name {
+      font-weight: 600;
+      font-size: 0.95rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .you-badge {
+      font-size: 0.65rem;
+      background: var(--accent2);
+      color: var(--text);
+      padding: 2px 8px;
+      border-radius: 10px;
+      letter-spacing: 1px;
+    }
+
+    .player-score {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .player-score span { color: var(--text); font-weight: 600; }
+
+    .hand {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    /* Action bar */
+    #action-bar {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      min-height: 70px;
+    }
+
+    #action-bar .action-hint {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .action-buttons { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+
+    /* Drawn card area */
+    #drawn-area {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    /* Modal (Runden-Ende) */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-overlay.show { display: flex; }
+
+    .modal {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 32px;
+      max-width: 420px;
+      width: 90%;
+      text-align: center;
+      border: 1px solid #2a2a4a;
+    }
+
+    .modal h2 { font-size: 1.5rem; margin-bottom: 20px; color: var(--accent); }
+
+    .score-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+    .score-table th { color: var(--text-muted); font-size: 0.8rem; padding: 6px; border-bottom: 1px solid #2a2a4a; }
+    .score-table td { padding: 10px 6px; font-size: 0.95rem; }
+    .score-table tr:not(:last-child) td { border-bottom: 1px solid #1a1a2e; }
+    .score-winner { color: var(--green); font-weight: 700; }
+
+    /* Toast */
+    #toast {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: #222;
+      border: 1px solid #333;
+      color: var(--text);
+      padding: 10px 22px;
+      border-radius: 20px;
+      font-size: 0.9rem;
+      opacity: 0;
+      transition: opacity 0.3s, transform 0.3s;
+      z-index: 200;
+      pointer-events: none;
+    }
+
+    #toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════ LOBBY ══════════════ -->
+<div id="lobby">
+  <h1>CABO</h1>
+  <p class="subtitle">Kartenspiel für zwei</p>
+
+  <div class="lobby-box">
+    <h2>Dein Name</h2>
+    <input type="text" id="player-name" placeholder="Name eingeben..." maxlength="20">
+  </div>
+
+  <div class="lobby-box">
+    <h2>Neues Spiel</h2>
+    <button class="btn-primary" onclick="createGame()">Spiel erstellen</button>
+  </div>
+
+  <div class="lobby-box">
+    <h2>Beitreten</h2>
+    <input type="text" id="join-code" placeholder="Spielcode (z.B. A3F2C1)" maxlength="6"
+           style="text-transform:uppercase; letter-spacing: 3px;">
+    <button class="btn-secondary" onclick="joinGame()">Beitreten</button>
+  </div>
+
+  <div id="lobby-status" style="color: var(--text-muted); font-size: 0.85rem; text-align:center;"></div>
+</div>
+
+<!-- ══════════════ GAME ══════════════ -->
+<div id="game">
+
+  <!-- Header -->
+  <div class="game-header">
+    <div class="game-id-badge">SPIEL <span id="display-game-id">—</span></div>
+    <div id="turn-badge" class="turn-indicator">Warten...</div>
+    <div style="font-size:0.8rem; color:var(--text-muted)">Runde <span id="round-num">1</span></div>
+  </div>
+
+  <!-- Status -->
+  <div id="status-msg"></div>
+
+  <!-- Tisch: Stapel -->
+  <div class="table-area">
+    <div class="pile-container">
+      <div class="pile-label">Nachziehstapel</div>
+      <div class="deck-card" id="draw-deck-btn" onclick="drawFromDeck()">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="1.5">
+          <rect x="3" y="3" width="18" height="18" rx="3"/>
+          <path d="M12 8v8M8 12h8"/>
+        </svg>
+      </div>
+      <div class="deck-count-badge"><span id="deck-count">52</span> Karten</div>
+    </div>
+
+    <!-- Gezogene Karte (erscheint nach Ziehen) -->
+    <div id="drawn-area" style="display:none;">
+      <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
+        <div class="pile-label">Gezogene Karte</div>
+        <div id="drawn-card-display" class="card face-up drawn-card"></div>
+        <div class="action-buttons" id="drawn-actions"></div>
+      </div>
+    </div>
+
+    <div class="pile-container">
+      <div class="pile-label">Ablagestapel</div>
+      <div id="discard-pile" class="card face-up" onclick="drawFromDiscard()" style="cursor:pointer;"></div>
+    </div>
+  </div>
+
+  <!-- Spieler-Hände -->
+  <div class="players-container" id="players-container"></div>
+
+  <!-- Aktionsleiste -->
+  <div id="action-bar">
+    <div class="action-hint" id="action-hint">Warten auf Mitspieler...</div>
+    <div class="action-buttons" id="main-actions"></div>
+  </div>
+
+</div>
+
+<!-- ══════════════ MODAL ══════════════ -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <h2 id="modal-title">Runde beendet!</h2>
+    <table class="score-table">
+      <thead>
+        <tr>
+          <th>Spieler</th>
+          <th>Hand</th>
+          <th>Punkte</th>
+          <th>Gesamt</th>
+        </tr>
+      </thead>
+      <tbody id="score-tbody"></tbody>
+    </table>
+    <div id="modal-buttons"></div>
+  </div>
+</div>
+
+<!-- ══════════════ TOAST ══════════════ -->
+<div id="toast"></div>
+
+<script>
+  const socket = io();
+
+  // ── State ──
+  let myGameId = null;
+  let myName = '';
+  let mySid = null;
+  let gameState = null;
+  let selectedMyCardIndex = null;   // Für Swap/Replace
+  let pendingAction = null;         // 'peek' | 'spy' | 'swap'
+  let spyTargetSid = null;
+  let swapMyIndex = null;
+
+  // ── Helpers ──
+  function toast(msg, duration = 2500) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), duration);
+  }
+
+  function setStatus(msg) {
+    document.getElementById('status-msg').textContent = msg;
+  }
+
+  function setLobbyStatus(msg) {
+    document.getElementById('lobby-status').textContent = msg;
+  }
+
+  // ── Lobby actions ──
+  function createGame() {
+    myName = document.getElementById('player-name').value.trim() || 'Spieler 1';
+    socket.emit('create_game', { name: myName });
+  }
+
+  function joinGame() {
+    myName = document.getElementById('player-name').value.trim() || 'Spieler 2';
+    const code = document.getElementById('join-code').value.trim().toUpperCase();
+    if (!code) { setLobbyStatus('Bitte einen Spielcode eingeben.'); return; }
+    socket.emit('join_game', { game_id: code, name: myName });
+  }
+
+  // ── Socket events ──
+  socket.on('connect', () => { mySid = socket.id; });
+
+  socket.on('game_created', (data) => {
+    myGameId = data.game_id;
+    document.getElementById('display-game-id').textContent = myGameId;
+    setLobbyStatus(`Spiel erstellt! Code: ${myGameId} — Warte auf Mitspieler...`);
+    toast(`Dein Code: ${myGameId}`);
+  });
+
+  socket.on('joined_game', (data) => {
+    myGameId = data.game_id;
+    document.getElementById('display-game-id').textContent = myGameId;
+  });
+
+  socket.on('error', (data) => {
+    setLobbyStatus('Fehler: ' + data.msg);
+    toast('⚠ ' + data.msg);
+  });
+
+  socket.on('player_left', (data) => {
+    toast(`${data.name} hat das Spiel verlassen.`);
+    setStatus(`${data.name} hat die Verbindung getrennt.`);
+  });
+
+  socket.on('game_state', (state) => {
+    gameState = state;
+    mySid = socket.id;
+
+    // Lobby → Game wechsel
+    if (document.getElementById('lobby').style.display !== 'none' && state.phase !== 'waiting') {
+      document.getElementById('lobby').style.display = 'none';
+      document.getElementById('game').style.display = 'flex';
+    }
+
+    renderGame(state);
+  });
+
+  socket.on('round_over', (data) => {
+    showRoundModal(data);
+  });
+
+  // ── Game actions ──
+  function startGame() {
+    socket.emit('start_game', { game_id: myGameId });
+  }
+
+  function peekDone() {
+    socket.emit('peek_done', { game_id: myGameId });
+  }
+
+  function drawFromDeck() {
+    if (!isMyTurn()) return;
+    if (gameState.drawn_card) return;
+    if (gameState.phase !== 'playing' && gameState.phase !== 'cabo_called') return;
+    socket.emit('draw_from_deck', { game_id: myGameId });
+  }
+
+  function drawFromDiscard() {
+    if (!isMyTurn()) return;
+    if (gameState.drawn_card) return;
+    if (gameState.phase !== 'playing' && gameState.phase !== 'cabo_called') return;
+    socket.emit('draw_from_discard', { game_id: myGameId });
+  }
+
+  function discardDrawn(useAction = false) {
+    socket.emit('discard_drawn', { game_id: myGameId, use_action: useAction });
+    document.getElementById('drawn-area').style.display = 'none';
+  }
+
+  function callCabo() {
+    socket.emit('call_cabo', { game_id: myGameId });
+  }
+
+  function endRound() {
+    socket.emit('end_round', { game_id: myGameId });
+  }
+
+  function nextRound() {
+    socket.emit('next_round', { game_id: myGameId });
+    document.getElementById('modal-overlay').classList.remove('show');
+  }
+
+  function isMyTurn() {
+    return gameState && gameState.current_turn_sid === socket.id;
+  }
+
+  // ── Render ──
+  function renderGame(state) {
+    document.getElementById('round-num').textContent = state.round;
+    document.getElementById('deck-count').textContent = state.deck_count;
+
+    // Turn badge
+    const badge = document.getElementById('turn-badge');
+    if (state.phase === 'waiting') {
+      badge.textContent = 'Warten auf Mitspieler...';
+      badge.className = 'turn-indicator';
+    } else if (state.phase === 'peek_phase') {
+      badge.textContent = 'Startkarten anschauen';
+      badge.className = 'turn-indicator';
+    } else if (isMyTurn()) {
+      badge.textContent = 'Du bist dran!';
+      badge.className = 'turn-indicator my-turn';
+    } else {
+      const other = state.players.find(p => p.sid === state.current_turn_sid);
+      badge.textContent = other ? `${other.name} ist dran` : '...';
+      badge.className = 'turn-indicator';
+    }
+
+    // Ablagestapel
+    const discardEl = document.getElementById('discard-pile');
+    if (state.discard_top && !state.discard_top.hidden) {
+      renderCardInto(discardEl, state.discard_top);
+    }
+
+    // Gezogene Karte
+    if (state.drawn_card && isMyTurn()) {
+      document.getElementById('drawn-area').style.display = 'flex';
+      const dc = document.getElementById('drawn-card-display');
+      renderCardInto(dc, state.drawn_card);
+      renderDrawnActions(state);
+    } else {
+      document.getElementById('drawn-area').style.display = 'none';
+    }
+
+    // Spieler rendern
+    renderPlayers(state);
+
+    // Aktionsleiste
+    renderActionBar(state);
+  }
+
+  function renderCardInto(el, card) {
+    el.innerHTML = '';
+    if (card.hidden) {
+      el.className = 'card face-down';
+    } else {
+      el.className = 'card face-up';
+      const val = document.createElement('div');
+      val.className = 'card-value';
+      val.textContent = card.value;
+      el.appendChild(val);
+      if (card.action) {
+        const act = document.createElement('div');
+        act.className = 'card-action';
+        act.textContent = card.action.toUpperCase();
+        el.appendChild(act);
+        const sym = document.createElement('div');
+        sym.className = 'card-symbol';
+        sym.textContent = card.symbol;
+        el.appendChild(sym);
+      }
+    }
+  }
+
+  function makeCardEl(card, clickHandler, extraClass = '') {
+    const el = document.createElement('div');
+    el.className = 'card ' + (card.hidden ? 'face-down' : 'face-up') + (extraClass ? ' ' + extraClass : '');
+    if (!card.hidden) {
+      const val = document.createElement('div');
+      val.className = 'card-value';
+      val.textContent = card.value;
+      el.appendChild(val);
+      if (card.action) {
+        const act = document.createElement('div');
+        act.className = 'card-action';
+        act.textContent = card.action.toUpperCase();
+        el.appendChild(act);
+        const sym = document.createElement('div');
+        sym.className = 'card-symbol';
+        sym.textContent = card.symbol;
+        el.appendChild(sym);
+      }
+    }
+    if (clickHandler) {
+      el.classList.add('clickable');
+      el.addEventListener('click', clickHandler);
+    }
+    return el;
+  }
+
+  function renderPlayers(state) {
+    const container = document.getElementById('players-container');
+    container.innerHTML = '';
+
+    // Eigener Spieler zuerst, dann Gegner
+    const me = state.players.find(p => p.is_me);
+    const others = state.players.filter(p => !p.is_me);
+    const sorted = [me, ...others].filter(Boolean);
+
+    sorted.forEach(player => {
+      const area = document.createElement('div');
+      area.className = 'player-area' +
+        (player.sid === state.current_turn_sid ? ' active-player' : '') +
+        (player.is_me ? ' me' : '');
+
+      // Info-Zeile
+      const info = document.createElement('div');
+      info.className = 'player-info';
+
+      const nameEl = document.createElement('div');
+      nameEl.className = 'player-name';
+      nameEl.textContent = player.name;
+      if (player.is_me) {
+        const badge = document.createElement('span');
+        badge.className = 'you-badge';
+        badge.textContent = 'DU';
+        nameEl.appendChild(badge);
+      }
+      if (player.sid === state.cabo_caller) {
+        const caboBadge = document.createElement('span');
+        caboBadge.style.cssText = 'font-size:0.65rem;background:#e94560;color:white;padding:2px 8px;border-radius:10px;';
+        caboBadge.textContent = 'CABO';
+        nameEl.appendChild(caboBadge);
+      }
+
+      const scoreEl = document.createElement('div');
+      scoreEl.className = 'player-score';
+      scoreEl.innerHTML = `Gesamt: <span>${player.total_score}</span>`;
+
+      info.appendChild(nameEl);
+      info.appendChild(scoreEl);
+      area.appendChild(info);
+
+      // Karten
+      const hand = document.createElement('div');
+      hand.className = 'hand';
+
+      player.hand.forEach((card, index) => {
+        let clickFn = null;
+
+        if (player.is_me && isMyTurn()) {
+          // Gezogene Karte gegen eigene tauschen
+          if (state.drawn_card && !state.pending_action) {
+            clickFn = () => {
+              socket.emit('replace_card', { game_id: myGameId, card_index: index });
+            };
+          }
+          // Peek-Aktion: eigene Karte anschauen
+          if (state.pending_action === 'peek') {
+            clickFn = () => {
+              socket.emit('use_peek', { game_id: myGameId, card_index: index });
+              // Nach 2 Sekunden wieder verdecken
+              setTimeout(() => {
+                socket.emit('peek_card_done', { game_id: myGameId, card_index: index });
+              }, 2000);
+            };
+          }
+          // Swap: eigene Karte wählen
+          if (state.pending_action === 'swap' && swapMyIndex === null) {
+            clickFn = () => {
+              swapMyIndex = index;
+              setStatus('Jetzt eine Karte des Gegners wählen.');
+              renderGame(gameState); // re-render to show selection
+            };
+          }
+        }
+
+        // Spy: Karte des Gegners anschauen
+        if (!player.is_me && isMyTurn() && state.pending_action === 'spy') {
+          clickFn = () => {
+            socket.emit('use_spy', { game_id: myGameId, target_sid: player.sid, card_index: index });
+            setTimeout(() => {
+              socket.emit('spy_done', { game_id: myGameId, target_sid: player.sid, card_index: index });
+            }, 2500);
+          };
+        }
+
+        // Swap: Gegner-Karte wählen (zweiter Schritt)
+        if (!player.is_me && isMyTurn() && state.pending_action === 'swap' && swapMyIndex !== null) {
+          clickFn = () => {
+            socket.emit('use_swap', {
+              game_id: myGameId,
+              my_index: swapMyIndex,
+              target_sid: player.sid,
+              target_index: index
+            });
+            swapMyIndex = null;
+          };
+        }
+
+        const extraClass = (player.is_me && swapMyIndex === index) ? ' selected' : '';
+        const cardEl = makeCardEl(card, clickFn, extraClass);
+        hand.appendChild(cardEl);
+      });
+
+      area.appendChild(hand);
+      container.appendChild(area);
+    });
+  }
+
+  function renderDrawnActions(state) {
+    const actionsEl = document.getElementById('drawn-actions');
+    actionsEl.innerHTML = '';
+    const card = state.drawn_card;
+
+    // Karte ablegen (immer möglich)
+    const discardBtn = document.createElement('button');
+    discardBtn.className = 'btn-outline';
+    discardBtn.textContent = 'Ablegen';
+    discardBtn.onclick = () => discardDrawn(false);
+    actionsEl.appendChild(discardBtn);
+
+    // Aktion nutzen (nur wenn vom Nachziehstapel und Aktion vorhanden)
+    if (card && card.action && state.drawn_from === 'deck') {
+      const actionBtn = document.createElement('button');
+      actionBtn.className = 'btn-secondary';
+      const labels = { peek: '👁 Peek', spy: '🔍 Spy', swap: '🔄 Swap' };
+      actionBtn.textContent = labels[card.action] || card.action;
+      actionBtn.onclick = () => discardDrawn(true);
+      actionsEl.appendChild(actionBtn);
+    }
+  }
+
+  function renderActionBar(state) {
+    const hint = document.getElementById('action-hint');
+    const mainActions = document.getElementById('main-actions');
+    mainActions.innerHTML = '';
+
+    if (state.phase === 'waiting') {
+      if (state.players.length === 1) {
+        hint.textContent = 'Warte auf zweiten Spieler...';
+      } else {
+        hint.textContent = 'Beide Spieler bereit!';
+        const startBtn = document.createElement('button');
+        startBtn.className = 'btn-success';
+        startBtn.textContent = 'Spiel starten';
+        startBtn.onclick = startGame;
+        mainActions.appendChild(startBtn);
+      }
+      return;
+    }
+
+    if (state.phase === 'peek_phase') {
+      const me = state.players.find(p => p.is_me);
+      if (me && !me.peek_done_flag) {
+        hint.textContent = 'Schau dir deine ersten 2 Karten an (links), dann bestätige.';
+        const btn = document.createElement('button');
+        btn.className = 'btn-primary';
+        btn.textContent = 'Karten gesehen ✓';
+        btn.onclick = peekDone;
+        mainActions.appendChild(btn);
+      } else {
+        hint.textContent = 'Warte auf Mitspieler...';
+      }
+      return;
+    }
+
+    if (!isMyTurn()) {
+      hint.textContent = state.phase === 'cabo_called'
+        ? `${state.players.find(p=>p.sid===state.current_turn_sid)?.name} hat noch einen letzten Zug.`
+        : 'Warte auf deinen Zug...';
+      return;
+    }
+
+    // Aktions-Hinweise
+    if (state.pending_action === 'peek') {
+      hint.textContent = '👁 Wähle eine deiner eigenen Karten zum Anschauen.';
+      return;
+    }
+    if (state.pending_action === 'spy') {
+      hint.textContent = '🔍 Wähle eine Karte des Gegners zum Anschauen.';
+      return;
+    }
+    if (state.pending_action === 'swap') {
+      hint.textContent = swapMyIndex === null
+        ? '🔄 Wähle zuerst eine deiner Karten...'
+        : '🔄 Jetzt eine Karte des Gegners wählen.';
+      return;
+    }
+
+    if (state.drawn_card) {
+      hint.textContent = 'Wähle eine deiner Karten zum Ersetzen — oder lege die gezogene Karte ab.';
+      return;
+    }
+
+    // Normaler Zug
+    if (state.phase === 'playing') {
+      hint.textContent = 'Ziehe eine Karte vom Nach- oder Ablagestapel — oder rufe Cabo!';
+      const caboBtn = document.createElement('button');
+      caboBtn.className = 'btn-primary';
+      caboBtn.style.background = 'var(--accent)';
+      caboBtn.textContent = 'CABO rufen!';
+      caboBtn.onclick = callCabo;
+      mainActions.appendChild(caboBtn);
+    }
+
+    if (state.phase === 'cabo_called') {
+      hint.textContent = 'Cabo wurde gerufen — das ist dein letzter Zug!';
+      // Nach dem letzten Zug: Runde beenden
+      const endBtn = document.createElement('button');
+      endBtn.className = 'btn-secondary';
+      endBtn.textContent = 'Runde beenden & auswerten';
+      endBtn.onclick = endRound;
+      mainActions.appendChild(endBtn);
+    }
+  }
+
+  // ── Runden-Modal ──
+  function showRoundModal(data) {
+    const tbody = document.getElementById('score-tbody');
+    tbody.innerHTML = '';
+    let minPoints = Math.min(...data.results.map(r => r.round_points));
+
+    data.results.forEach(r => {
+      const tr = document.createElement('tr');
+      const isWinner = r.round_points === minPoints;
+      tr.innerHTML = `
+        <td class="${isWinner ? 'score-winner' : ''}">${r.name}${isWinner ? ' 🏆' : ''}</td>
+        <td>${r.hand_score}</td>
+        <td>${r.round_points}</td>
+        <td><strong>${r.total_score}</strong></td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    const title = document.getElementById('modal-title');
+    const buttons = document.getElementById('modal-buttons');
+    buttons.innerHTML = '';
+
+    if (data.kamikaze) {
+      title.textContent = '💥 KAMIKAZE!';
+    } else {
+      title.textContent = 'Runde beendet!';
+    }
+
+    if (data.game_over) {
+      title.textContent = '🎉 Spiel vorbei!';
+      const winner = data.results.reduce((a,b) => a.total_score < b.total_score ? a : b);
+      const p = document.createElement('p');
+      p.style.cssText = 'color:var(--green);font-size:1.1rem;margin-bottom:16px;';
+      p.textContent = `${winner.name} gewinnt das Spiel!`;
+      buttons.appendChild(p);
+    } else {
+      const btn = document.createElement('button');
+      btn.className = 'btn-success';
+      btn.textContent = 'Nächste Runde';
+      btn.onclick = nextRound;
+      buttons.appendChild(btn);
+    }
+
+    document.getElementById('modal-overlay').classList.add('show');
+  }
+</script>
+</body>
+</html>
